@@ -1,7 +1,7 @@
-require('dotenv').config()
+require('dotenv').config();
 const readlineSync = require('readline-sync');
 const { GoogleGenAI } = require('@google/genai');
-
+const fetch = require('node-fetch');
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const ConversationHistory = [];
@@ -14,231 +14,215 @@ async function main() {
     });
     return response.text;
   } catch (err) {
-    console.log("Error Occured " + err.message);
+    console.log("Error Occurred: " + err.message);
   }
-
 }
 
-// Ai Agent tools = Weather info , crypto info , news info , github profile info.
-// tools in promp that ai will remeber which is 
-
-async function getWeather() {
-
-  const weatherInfo = []
+async function getWeather(locations) {
+  const weatherInfo = [];
   try {
-    for (const { location, date } of location) {
-      // date today
-      if (location.toLowerCase === "today") {
-        const response = await fetch(`http://api.weatherapi.com/v1/current.json?key=a0b8f3b85d9d4c34908134427252504&q=${location}&aqi=no
-        `)
+    for (const { city, date } of locations) {
+      if (date.toLowerCase() === "today") {
+        const response = await fetch(`http://api.weatherapi.com/v1/current.json?key=a0b8f3b85d9d4c34908134427252504&q=${city}&aqi=no`);
         const data = await response.json();
         weatherInfo.push(data);
       } else {
-        const response = await fetch(`http://api.weatherapi.com/v1/future.json?key=a0b8f3b85d9d4c34908134427252504&q=${location}&dt=${date}
-`)
+        const response = await fetch(`http://api.weatherapi.com/v1/future.json?key=a0b8f3b85d9d4c34908134427252504&q=${city}&dt=${date}`);
         const data = await response.json();
         weatherInfo.push(data);
       }
     }
-
     return weatherInfo;
-
   } catch (err) {
-    console.log("Error Occured " + err.nessage)
+    console.log("Error Occurred: " + err.message);
   }
 }
 
+async function getCryptoInfo(cryptoList) {
+  const cryptoInfo = [];
+  try {
+    for (const { name } of cryptoList) {
+      const response = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${name}`);
+      const data = await response.json();
+      cryptoInfo.push(...data);
+    }
+    return cryptoInfo;
+  } catch (err) {
+    console.log("Error Occurred: " + err.message);
+  }
+}
 
-// crypto info 
-async function getCryptoInfo(coin) {
-  const bitcoinInfo = []
+const getGithubInfo = async (profiles) => {
+  const githubData = [];
 
   try {
-    const response = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coin}`)
-    const data = response.json();
-    bitcoinInfo.push(data)
-    return bitcoinInfo;
+    for (const { username } of profiles) {
+      const response = await fetch(`https://api.github.com/users/${username}`);
+      const data = await response.json();
+      githubData.push(data);
+    }
+
+    return githubData;
 
   } catch (err) {
-    console.log("Error Occured" + err.message)
+    console.log("Error Occurred: " + err.message);
   }
-}
-
-// github info
-const getGithubInfo = async (user) => {
-  const githubdata = [];
-  try {
-    const response = await fetch(` https://api.github.com/users/${user}`)
-    const data = await response.json();
-    githubdata.push(data);
-    return githubdata;
-
-  } catch (err) {
-    console.log("Error Occured" + err.message)
-  }
-}
-
-// news info
-// const getNews = async () => {
-//   const newsData = [];
-//   try {
-//     const response = await fetch('');
-//     const data = response.json();
-//     newsData.push(data);
-//     return newsData;
-
-//   } catch (err) {
-//     console.log("Error Occured" + err.message);
-//   }
-// }
+};
 
 const AiChatting = async () => {
-
-  // Wait for user's response.
-  const question = readlineSync.question('Hey, How can i Help you? ');
+  const question = readlineSync.question('Hey, how can I help you? ');
   const prompt = `
-Your An Ai Agent and Your Task is to get the response from weather , crypto , github profile info you have to give me the response you have to give me the response in the json format only.
-
-Analyse the the user query for example user ask weather update in message then try to fetch the city and date details from it..
-and for crypto you will have the details then you have to analyse that data which you have got in via response and read user ${question} and anaylse what the basically user needed like weather info , crypto info , github profile info 
-
-And make sure assign the id automatically for example weather id is 1 , crypto id 2 and github profile id is 3 means when you are getting the data user question assign the id according which i have said to you and that is important that will only decide which data the user needed.
-
-example for the weather data
-ifu user ask for the today weather then mark date as "today"
-
-    to fetch weather details i have already have an function which will be fetching the weather details forr me
-
-    I want you to give the JSON Format should look like
-    {
-    id:1
-    "weather_details_needed":true,
-    "location:[{"city":"delhi" , date:"2025-04-25"}]
-    }
-
-    for multiple location then 
-        {
-    id:1
-    "weather_details_needed":true,
-    "location:[{"city":"delhi" , date:"2025-04-25" , {"city":"Hyderabad" , date:2025-04-25}}]
-    }
-    if you need the weather information use this format.
-
-
-  Once you have the weather report details, respond me in JSON format only.
-  If I have provided you weather details of delhi and you have enough information about them, make the summary of weather report and return it to me like below.
-  JSON format should look like below:
-{
-  id:1
-  "weather_details_needed": false,
-  "weather_report":"As of Sunday, May 4, 2025, Delhi is experiencing hazy conditions with a temperature of approximately 27°C (81°F). The India Meteorological Department (IMD) has issued a yellow alert for the day, forecasting light rain accompanied by thunderstorms, lightning, and strong surface winds, with gusts potentially reaching up to 50 km/h. 
-The Indian Express
-+3
-News24
-+3
-The Times of India
-+3
-
-The maximum temperature recorded today is around 36°C (96°F), which is slightly below the seasonal average. Humidity levels are high, peaking at 87%, contributing to a muggy atmosphere.
-
-Looking ahead, the IMD predicts that Delhi will continue to experience cloudy skies with chances of light rain and thunderstorms until Tuesday, May 6. This weather pattern follows the significant rainfall recorded on Friday, which was the second-highest single-day rainfall in May since 1901, leading to widespread waterlogging and traffic disruptions. 
-The Indian Express
-+1
-The Times of India
-+1
-
-Residents are advised to stay updated with the latest weather forecasts and take necessary precautions during thunderstorms and periods of heavy rainfall.",
-here you want to get the date then ${new Date(Date.now())}; i have provided
-
-/for example like crypto
- 
-    id:2
-    "crypto_details_needed":true,
-    "cryptoInfo:[{"name":"bitcoin" }]
-    }
-
-    for multiple bitcoin are given then 
-        {
-    id:2
-    "bitcoin_details_needed":true,
-    "cryptoInfo:[{"name":"bitcoin"} , {"name":"ethereum"} , {"name":"BNB"}]
-    } 
-
-
-so like this you make the user asked in the bitcoin question an user ask then give me the response like json format below
-
+  You are an AI assistant agent that helps users get data using tools provided by the developer (not by you). Your job is to interpret the user request and classify it into one of the supported tools:
+  
+  🛠️ Supported Tools:
+  1. Weather Information
+  2. Cryptocurrency Information
+  3. GitHub Profile Information
+  
+  👉 Your job:
+  Based on the user input, respond with a structured **pure JSON** object as per the following rules. Do not explain or provide extra text—just return JSON.
+  
+  ---
+  
+  🌦️ WEATHER REQUESTS
+  - If the user asks for weather updates, extract the **city** and **date** (e.g., "today", "tomorrow", or specific date in YYYY-MM-DD format).
+  - Response format:
+  
   {
-    id:2
-    "bitcoin_details_needed":false,
-    "crypto_report":"As of May 4, 2025, Bitcoin (BTC) is trading at approximately $95,391 USD, reflecting a slight decrease of 0.71% over the past 24 hours. The cryptocurrency's price has fluctuated between an intraday high of $96,416 and a low of $95,316. "
-    } 
+    "id": 1,
+    "weather_details_needed": true,
+    "location": [
+      { "city": "delhi", "date": "2025-05-06" }
+    ]
+  }
+  
+  Multiple cities:
+  {
+    "id": 1,
+    "weather_details_needed": true,
+    "location": [
+      { "city": "delhi", "date": "2025-05-06" },
+      { "city": "mumbai", "date": "2025-05-06" }
+    ]
+  }
+  
+  If the weather data is already available:
+  {
+    "id": 1,
+    "weather_details_needed": false,
+    "weather_report": "Delhi is currently sunny with a temperature of 30°C."
+  }
+  
+  ---
+  
+  💰 CRYPTOCURRENCY REQUESTS
+  - If the user asks for cryptocurrency prices or data, extract the coin name(s).
+  - Response format:
+  
+  {
+    "id": 2,
+    "crypto_details_needed": true,
+    "cryptoInfo": [
+      { "name": "bitcoin" },
+      { "name": "ethereum" }
+    ]
+  }
+  
+  Already have the data?
+  {
+    "id": 2,
+    "crypto_details_needed": false,
+    "crypto_report": "Bitcoin is at $60,000. Ethereum is at $3,000."
+  }
+  
+  ---
+  
+  👨‍💻 GITHUB PROFILE REQUESTS
+  - If the user asks for GitHub profile info, extract the username(s).
+  - Response format:
+  
+  {
+    "id": 3,
+    "github_details_needed": true,
+    "githubProlfie": [
+      { "username": "gopal16" }
+    ]
+  }
+  
+  Already have the data?
+  {
+    "id": 3,
+    "github_details_needed": false,
+    "github_report": "GitHub user 'gopal16' has 25 public repos and 5 followers."
+  }
+  
+  ---
+  
+  📌 RULES:
+  - Always return **pure JSON only**.
+  - Use "id": 1 for weather, 2 for crypto, 3 for GitHub.
+  - No extra explanation, markdown, or commentary.
+  - Extract keywords like city names, coin names, GitHub usernames accurately.
+  
+  Now, the user has asked: "${question}"
+  Classify the intent and return the appropriate JSON.
+  `;
+  
 
-
-    like this is needed.
-
-    User asked this question: ${question}
-    now for github info also follow like that only 
-
-   { 
-        id:3
-    "github_details_needed":true,
-    "githubProlfie:[{"username":"gopal16" }]
-    } 
-
-    you have to give me the report of the gihub profile info like his recent repository and his profile activity and his profile working on which repository and in recent commit. about of that github 
-    {
-    id:3
-    "github_details_needed":false,
-     "github_report" : "in this send the report"
-    }
-
- Strictly follow the JSON Format only.
-`
-  ConversationHistory.push({
-    role: "user",
-    parts: [{ text: prompt }]
-  })
+  ConversationHistory.push({ role: "user", parts: [{ text: prompt }] });
 
   while (true) {
     let response = await main();
     ConversationHistory.push({ role: "model", parts: [{ text: response }] });
-    response = response.trim();
-    response = response.replace(/^```json\s*|```\s*$/gm, '').trim();
+
+    response = response.trim().replace(/^```json\s*|```\s*$/gm, '');
     const data = JSON.parse(response);
 
-    if (data.weather_details_needed == false) {
+    // Pre-filled report
+    if (data.weather_details_needed === false) {
       console.log(data.weather_report);
       break;
     }
 
-    if (data.bitcoin_details_needed == false) {
+    if (data.crypto_details_needed === false) {
       console.log(data.crypto_report);
       break;
     }
 
-    if (data.github_details_needed == false) {
+    if (data.github_details_needed === false) {
       console.log(data.github_report);
       break;
     }
 
-    const weatherInformation = await getWeather(data.location);
-    const weatherInfo = JSON.stringify(weatherInformation);
-    ConversationHistory.push({role:"user" , parts:[{text:`This is the weather report i have generated for you. Use this weather report and generate user response ${weatherInfo}`}]});
-  
-    const cryptoInforomation = await getCryptoInfo(data.cryptoInfo);
-    const cryptoInfo = JSON.stringify(cryptoInforomation);
-    ConversationHistory.push({role:"user" , parts:[{text:`This is the crypto report i have generated for you. Use this crypto report and generate user response ${cryptoInfo}`}]});
+    // Fetch dynamic data based on tool
+    if (data.weather_details_needed) {
+      const weatherInformation = await getWeather(data.location);
+      const weatherInfo = JSON.stringify(weatherInformation);
+      ConversationHistory.push({
+        role: "user",
+        parts: [{ text: `This is the weather report I generated for you. Use this report to reply: ${weatherInfo}` }]
+      });
+    }
 
-    const githubProfileInformation = await getGithubInfo(data.githubProlfie);
-    const githubInfo = JSON.stringify(githubProfileInformation);
-    ConversationHistory.push({role:"user" , parts:[{text:`This is the gtihub report i have generated for you. Use this github profile report and generate user response ${githubInfo}`}]})
+    if (data.crypto_details_needed) {
+      const cryptoInformation = await getCryptoInfo(data.cryptoInfo);
+      const cryptoInfo = JSON.stringify(cryptoInformation);
+      ConversationHistory.push({
+        role: "user",
+        parts: [{ text: `This is the crypto report I generated for you. Use this to respond: ${cryptoInfo}` }]
+      });
+    }
 
+    if (data.github_details_needed) {
+      const githubProfileInformation = await getGithubInfo(data.githubProfile);
+      const githubInfo = JSON.stringify(githubProfileInformation);
+      ConversationHistory.push({
+        role: "user",
+        parts: [{ text: `This is the GitHub report I generated for you. Use this to respond: ${githubInfo}` }]
+      });
+    }
   }
-
-}
+};
 
 AiChatting();
-
-
-
-module.exports = main
+module.exports = main;
